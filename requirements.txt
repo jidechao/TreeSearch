@@ -1,2 +1,35 @@
-# No required runtime dependencies.
-# Optional dependencies are listed in pyproject.toml [project.optional-dependencies].
+# TreeSearch / pytreesearch - 全量依赖导出
+#
+# 该文件把仓库内出现的依赖按“可一键安装”方式展开：
+# - build-system（打包构建）
+# - project.optional-dependencies（全部可选能力）
+# - dev（测试）
+# - examples/benchmark（基准脚本）
+#
+# 用法：
+#   pip install -r requirements.txt
+
+# --- build-system (pyproject.toml [build-system]) ---
+setuptools>=68.0
+wheel
+
+# --- optional-dependencies: all ---
+jieba>=0.42
+pageindex>=0.1
+python-docx>=0.8
+beautifulsoup4>=4.12
+tree-sitter-languages>=1.10
+
+# --- optional-dependencies: fts5（部分平台可能无 wheel，安装失败可忽略）---
+# pysqlite3-binary>=0.5
+
+# --- dev (pyproject.toml [project.optional-dependencies].dev) ---
+pytest>=7.0
+pytest-asyncio>=0.21
+
+# --- RAG 生成（SiliconFlow OpenAI 兼容接口）---
+openai>=1.0
+
+# --- examples/benchmark ---
+numpy>=1.26
+python-dotenv>=1.0
