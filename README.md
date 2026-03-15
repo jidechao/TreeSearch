@@ -54,6 +54,18 @@ ts = TreeSearch("src/", "docs/*.md", "README.md")
 results = ts.search("authentication")
 ```
 
+### In-Memory Mode
+
+For quick searches, scripts, or ephemeral use cases, set `db_path=None` to skip writing any `.db` file to disk:
+
+```python
+# In-memory mode — no index.db file, all indexes kept in memory
+ts = TreeSearch("docs/", db_path=None)
+results = ts.search("voice calls")
+```
+
+Performance is excellent even with thousands of documents (5,000 docs < 10ms). The trade-off is that indexes are lost when the process exits. For persistent, incremental indexing, use the default `db_path` or set it to a file path.
+
 ## Why TreeSearch?
 
 Traditional RAG systems split documents into fixed-size chunks and retrieve by vector similarity. This **destroys document structure**, loses heading hierarchy, and misses reasoning-dependent queries.
@@ -85,7 +97,7 @@ TreeSearch takes a fundamentally different approach — parse documents into **t
 - **Ripgrep-accelerated GrepFilter** — Auto-uses system `rg` for fast line-level matching with transparent native Python fallback; hit-count-based scoring ranks multi-match nodes higher
 - **Parser registry** — Extensible `ParserRegistry` with built-in parsers auto-registered; custom parsers via `ParserRegistry.register()`
 - **Python AST parsing** — `ast` module extracts classes/functions with full signatures (parameters, return types); regex fallback for syntax errors
-- **PDF/DOCX/HTML parsers** — Optional parsers via `pageindex`, `python-docx`, `beautifulsoup4` (install with `pip install pytreesearch[all]`)
+- **PDF/DOCX/HTML parsers** — Optional parsers via `PyPDF2`, `python-docx`, `beautifulsoup4` (install with `pip install pytreesearch[all]`)
 - **GrepFilter** — Exact literal/regex matching for precise symbol and keyword search across tree nodes
 - **Source-type routing** — Automatic pre-filter selection based on file type (e.g., code files use GrepFilter + FTS5)
 - **Chinese + English** — Built-in jieba tokenization for Chinese and regex tokenization for English
