@@ -59,6 +59,7 @@ _QUOTED_PHRASE = re.compile(r'"([^"]+)"')
 
 # Stop words to ignore during term overlap computation
 _STOP_WORDS = frozenset({
+    # English
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "do", "does", "did", "will", "would", "could",
     "should", "may", "might", "shall", "can", "of", "in", "to", "for",
@@ -70,6 +71,14 @@ _STOP_WORDS = frozenset({
     "all", "each", "every", "both", "few", "more", "most", "other",
     "some", "such", "only", "own", "same", "we", "they", "he", "she",
     "us", "our", "their", "your", "my", "i", "me", "you",
+    # Chinese
+    "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都",
+    "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你",
+    "会", "着", "没有", "看", "好", "自己", "这", "他", "她", "它",
+    "吗", "吧", "呢", "啊", "呀", "哦", "嗯", "嘛", "哈",
+    "怎样", "怎么", "什么", "哪", "哪个", "哪些", "为什么", "如何",
+    "可以", "能", "把", "被", "让", "给", "对", "从", "向", "跟",
+    "还", "又", "再", "已", "已经", "正在", "将", "将要",
 })
 
 
@@ -78,9 +87,12 @@ def build_query_plan(query: str) -> QueryPlan:
 
     Steps:
     1. Extract quoted phrases
-    2. Clean and split remaining terms (filter stop words)
-    3. Detect code / structural intent via regex
+    2. Tokenize remaining text (CJK-aware: uses jieba for Chinese)
+    3. Filter stop words
+    4. Detect code / structural intent via regex
     """
+    from .tokenizer import tokenize, _RE_HAS_CJK
+
     plan = QueryPlan(raw=query)
 
     # Extract quoted phrases
@@ -88,12 +100,22 @@ def build_query_plan(query: str) -> QueryPlan:
         plan.phrases.append(m.group(1).strip())
     remaining = _QUOTED_PHRASE.sub("", query)
 
-    # Clean and split terms
-    remaining = remaining.strip().lower()
-    remaining = re.sub(r'[^\w\u4e00-\u9fff\s]', ' ', remaining)
-    raw_terms = [t for t in remaining.split() if t]
-    # Keep all raw terms for phrase matching, but filter stop words for scoring
-    plan.terms = [t for t in raw_terms if t not in _STOP_WORDS and len(t) > 1]
+    # Tokenize with CJK support (jieba for Chinese, whitespace for English)
+    remaining = remaining.strip()
+    tokens = tokenize(remaining, use_stemmer=False, remove_stopwords=False)
+    # Further filter: remove stop words and single-char English tokens
+    raw_terms = [t.lower() for t in tokens if t.strip()]
+    plan.terms = [t for t in raw_terms if t not in _STOP_WORDS and (
+        len(t) > 1 or _RE_HAS_CJK.match(t)
+    )]
+    # Deduplicate while preserving order
+    seen = set()
+    deduped = []
+    for t in plan.terms:
+        if t not in seen:
+            seen.add(t)
+            deduped.append(t)
+    plan.terms = deduped
     # Fallback: if all terms were stop words, keep original
     if not plan.terms and raw_terms:
         plan.terms = raw_terms
@@ -140,6 +162,9 @@ def estimate_idf(terms: list[str], corpus_texts: list[str]) -> dict[str, float]:
 
     Uses smooth IDF: log((N + 1) / (df + 1)) + 1 to avoid zero weights.
     Corpus is typically all node texts from a single document.
+
+    Optimization: pre-lowercase corpus texts once, then check all terms.
+    Previous version did `text.lower()` inside the inner loop (N * T calls).
 
     Args:
         terms: query terms (lowercased)
@@ -194,8 +219,10 @@ def score_anchor(
     # Depth penalty: deeper nodes are less ideal as anchors
     depth_penalty = min(depth / max(max_depth, 1), 1.0) * 0.10
 
-    # Title match bonus (smaller than before -- titles are often generic)
-    title_bonus = 0.08 if has_title_match else 0.0
+    # Title match bonus: query terms in node title strongly indicate relevance.
+    # Academic papers: section titles precisely describe content.
+    # Financial docs: titles like "Net Sales", "Operating Income" are highly discriminative.
+    title_bonus = 0.15 if has_title_match else 0.0
 
     # Phrase match bonus
     phrase_bonus = 0.07 if has_phrase_match else 0.0
